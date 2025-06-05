@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>沙巴土地地块地图 / Sabah Land Lot Map (Demo)</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/leaflet/1.9.4/leaflet.css" />
+  <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+
+  <style>
+    body, html {
+      margin: 0; padding: 0; height: 100%;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      user-select: none;
+    }
+    #map { height: 100vh; }
+    #upload {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      z-index: 1000;
+      background: white;
+      padding: 6px 12px;
+      border-radius: 5px;
+      box-shadow: 0 0 5px rgba(0,0,0,0.3);
+      font-size: 14px;
+    }
+    #infoPanel {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      z-index: 1000;
+      background: rgba(255,255,255,0.95);
+      padding: 10px 16px;
+      border-radius: 5px;
+      font-size: 14px;
+      box-shadow: 0 0 5px rgba(0,0,0,0.3);
+      font-weight: bold;
+      font-family: "Microsoft YaHei", Arial, sans-serif;
+      max-width: 350px;
+      pointer-events: none;
+      line-height: 1.3em;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  
+  <div id="upload">
+    <label for="kmlUpload">选择KML文件 / Choose KML File: </label>
+    <input type="file" id="kmlUpload" accept=".kml" />
+  </div>
+
+  <div id="infoPanel">
+    经度 (Longitude): -- <br/>
+    纬度 (Latitude): -- <br/>
+    面积 (Area): -- acres / -- ha <br/>
+    距离 (Length): -- km
+  </div>
+
+  <!-- Leaflet JS dan plugin -->
+  <script src="https://cdn.bootcdn.net/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+  <script src="https://cdn.bootcdn.net/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+  <script src="https://cdn.bootcdn.net/ajax/libs/togeojson/0.16.0/togeojson.min.js"></script>
+  <script src="https://cdn.bootcdn.net/ajax/libs/Turf.js/6.5.0/turf.min.js"></script>
+
+  <script>
+    var map = L.map('map', {
+      center: [5.9804, 116.0735],
+      zoom: 13,
+      zoomControl: true
+    });
+
+    var osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors'
+    });
+
+    var topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+      maxZoom: 17,
+      attribution: 'Map data: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> contributors'
+    });
+
+    var gaode = L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&style=7&x={x}&y={y}&z={z}', {
+      subdomains: ['1','2','3','4'],
+      attribution: '&copy; 高德地图 Gaode Map'
+    });
+
+    var baseMaps = {
+      "OpenStreetMap": osm,
+      "Topo Map (OpenTopoMap)": topo,
+      "Gaode Map (高德地图)": gaode
+    };
+
+    osm.addTo(map);
+    L.control.layers(baseMaps).addTo(map);
+
+    const M2_TO_ACRES = 0.000247105;
+    const M2_TO_HECTARES = 0.0001;
+
+    function formatAreaPopup(feature) {
+      var area = turf.area(feature);
+      return "面积 / Area: " + (area * M2_TO_ACRES).toFixed(4) + " acres / " + (area * M2_TO_HECTARES).toFixed(4) + " ha";
+    }
+
+    function formatLengthPopup(length) {
+      return "距离 / Length: " + (length / 1000).toFixed(4) + " km";
+    }
+
+    var lotFeature = {
+      "type": "Feature",
+      "properties": {"name": "Lot 12345"},
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [116.0700, 5.9800],
+          [116.0725, 5.9800],
+          [116.0725, 5.9825],
+          [116.0700, 5.9825],
+          [116.0700, 5.9800]
+        ]]
+      }
+    };
+
+    var lotLayer = L.geoJSON(lotFeature, {
+      style: {
+        color: 'red',
+        fillColor: '#ff4d4d',
+        fillOpacity: 0.4,
+        weight: 3
+      },
+      onEachFeature: function (feature, layer) {
+        var popupContent = "地块名称 / Lot Name: " + feature.properties.name + "<br/>" + formatAreaPopup(feature);
+        layer.bindPopup(popupContent);
+      }
+    }).addTo(map);
+
+    var drawnItems = new L.FeatureGroup();
+    map.addLayer(drawnItems);
+
+    var drawControl = new L.Control.Draw({
+      edit: {
+        featureGroup: drawnItems,
+        edit: true,
+        remove: true
+      },
+      draw: {
+        polygon: {
+          shapeOptions: {
+            color: 'blue',
+            fillColor: '#3399ff',
+            fillOpacity: 0.4,
+            weight: 3
+          }
+        },
+        marker: true,
+        polyline: {
+          shapeOptions: {
+            color: 'blue',
+            weight: 3
+          }
+        },
+        rectangle: false,
+        circle: false,
+        circlemarker: false
+      }
+    });
+    map.addControl(drawControl);
+
+    var currentKmlLayer;
+
+    function updateInfoPanel(latlng, area = null, length = null, geomType = null) {
+      var areaAcres = area !== null ? (area * M2_TO_ACRES).toFixed(4) : "--";
+      var areaHa = area !== null ? (area * M2_TO_HECTARES).toFixed(4) : "--";
+      var lengthKm = length !== null ? (length / 1000).toFixed(4) : "--";
+
+      var areaText = (geomType === 'Polygon' || geomType === 'MultiPolygon') ? areaAcres + " acres / " + areaHa + " ha" : "--";
+      var lengthText = (geomType === 'LineString' || geomType === 'MultiLineString') ? lengthKm + " km" : "--";
+
+      document.getElementById('infoPanel').innerHTML =
+        "经度 (Longitude): " + latlng.lng.toFixed(6) + "<br/>" +
+        "纬度 (Latitude): " + latlng.lat.toFixed(6) + "<br/>" +
+        "面积 (Area): " + areaText + "<br/>" +
+        "距离 (Length): " + lengthText;
+    }
+
+    updateInfoPanel({lat:0, lng:0});
+
+    function calculateGeometry(layer) {
+      var geojson = layer.toGeoJSON();
+      var area = null, length = null;
+      var geomType = geojson.geometry.type;
+
+      if (geomType === "Polygon" || geomType === "MultiPolygon") {
+        area = turf.area(geojson);
+      } else if (geomType === "LineString" || geomType === "MultiLineString") {
+        length = turf.length(geojson, {units: 'meters'});
+      }
+
+      var latlng;
+      if (layer.getBounds) {
+        latlng = layer.getBounds().getCenter();
+      } else if (layer.getLatLng) {
+        latlng = layer.getLatLng();
+      } else {
+        latlng = {lat: 0, lng: 0};
+      }
+
+      updateInfoPanel(latlng, area, length, geomType);
+
+      if (geomType === "Polygon" || geomType === "MultiPolygon") {
+        var popupContent = "面积 / Area: " + (area * M2_TO_ACRES).toFixed(4) + " acres / " + (area * M2_TO_HECTARES).toFixed(4) + " ha";
+        layer.bindPopup(popupContent).openPopup();
+      } else if (geomType === "LineString" || geomType === "MultiLineString") {
+        var popupContent = "距离 / Length: " + (length / 1000).toFixed(4) + " km";
+        layer.bindPopup(popupContent).openPopup();
+      } else {
+        layer.unbindPopup();
+      }
+    }
+
+    map.on(L.Draw.Event.CREATED, function (event) {
+      var layer = event.layer;
+      drawnItems.addLayer(layer);
+      calculateGeometry(layer);
+    });
+
+    map.on('draw:edited', function(e) {
+      e.layers.eachLayer(function(layer) {
+        calculateGeometry(layer);
+      });
+    });
+
+    map.on('click', function(e) {
+      var latlng = e.latlng;
+      updateInfoPanel(latlng);
+    });
+
+    document.getElementById('kmlUpload').addEventListener('change', function(evt) {
+      var file = evt.target.files[0];
+      if (!file) return;
+
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        var parser = new DOMParser();
+        var kmlDoc = parser.parseFromString(e.target.result, 'text/xml');
+        var geojson = toGeoJSON.kml(kmlDoc);
+
+        if (currentKmlLayer) {
+          map.removeLayer(currentKmlLayer);
+        }
+
+        currentKmlLayer = L.geoJSON(geojson, {
+          style: function (feature) {
+            return {
+              color: '#006600',
+              fillColor: '#00cc44',
+              fillOpacity: 0.4,
+              weight: 3
+            };
+          },
+          onEachFeature: function(feature, layer) {
+            calculateGeometry(layer);
+            layer.on('click', function() {
+              calculateGeometry(layer);
+            });
+          }
+        }).addTo(map);
+
+        map.fitBounds(currentKmlLayer.getBounds());
+      };
+      reader.readAsText(file);
+    });
+  </script>
+</body>
+</html>
